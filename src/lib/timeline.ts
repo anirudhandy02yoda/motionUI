@@ -1,26 +1,20 @@
 import { AnalysisResult, Timeline, TimedStep } from "./types";
+import { computeStepMotion } from "./motionTiming";
 
 export const FPS = 30;
 
-const MIN_STEP_MS = 2800;
-const MAX_STEP_MS = 6200;
-const MS_PER_TYPED_CHAR = 45;
-const MS_PER_CAPTION_CHAR = 18;
-const ACTION_SETTLE_MS = 900;
-
 /** Pure function: same JSON in -> same frame-accurate timeline out. Used by
  * both the GSAP live player and the Remotion server renderer so the two
- * engines never drift apart for a given analysis result. */
+ * engines never drift apart for a given analysis result. Each step's
+ * duration is the exact sum of its own motion phases (see motionTiming.ts),
+ * not an independent estimate — so there's always genuine settle time after
+ * an action finishes and before the next step cuts in. */
 export function buildTimeline(analysis: AnalysisResult): Timeline {
   let cursor = 0;
-  const steps: TimedStep[] = analysis.steps.map((step) => {
-    const typed = step.userAction?.typeText?.length ?? 0;
-    const caption = step.caption?.length ?? 0;
-    const raw =
-      ACTION_SETTLE_MS + typed * MS_PER_TYPED_CHAR + caption * MS_PER_CAPTION_CHAR;
-    const durationMs = Math.min(MAX_STEP_MS, Math.max(MIN_STEP_MS, raw));
-    const timed: TimedStep = { ...step, startMs: cursor, durationMs };
-    cursor += durationMs;
+  const steps: TimedStep[] = analysis.steps.map((step, i) => {
+    const { totalMs } = computeStepMotion(step, i === 0);
+    const timed: TimedStep = { ...step, startMs: cursor, durationMs: totalMs };
+    cursor += totalMs;
     return timed;
   });
 

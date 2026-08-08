@@ -24,7 +24,6 @@ const StepCard = forwardRef<HTMLDivElement, StepCardProps>(function StepCard(
     <div
       ref={ref}
       className="absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl"
-      style={{ opacity: 0 }}
       aria-hidden={!isActive}
     >
       <div

@@ -2,7 +2,8 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import { AbsoluteFill, interpolate, Easing, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CalculateMetadataFunction } from "remotion";
 import { AnalysisResult } from "@/lib/types";
-import { buildTimeline, timelineToFrames } from "@/lib/timeline";
+import { buildTimeline, timelineToFrames, msToFrames } from "@/lib/timeline";
+import { computeStepMotion, SLIDE_MS } from "@/lib/motionTiming";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, VIDEO_FPS, CARD_HEIGHT, CURSOR_HOME } from "./layout";
 import StepScene from "./StepScene";
 import CursorLayer from "./CursorLayer";
@@ -11,10 +12,10 @@ export interface WalkthroughCompositionProps extends Record<string, unknown> {
   analysis: AnalysisResult;
 }
 
-const MOVE_DELAY_FRAMES = 12;
-const MOVE_FRAMES = 16;
-const CROSSFADE_FRAMES = 10;
-const CHARS_PER_FRAME = 1.05;
+// Secondary visual-effect durations (ripple, tooltip hold) — short, self
+// contained, and always well within a step's actionDuration+hold budget, so
+// they're kept as local frame constants rather than routed through the
+// shared motion model.
 const TOOLTIP_HOLD_FRAMES = 26;
 
 export const calculateWalkthroughMetadata: CalculateMetadataFunction<
@@ -61,9 +62,17 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
 
   const step = steps[index];
   const prevStep = index > 0 ? steps[index - 1] : null;
-  const moveStart = step ? step.startFrame + MOVE_DELAY_FRAMES : 0;
-  const moveEnd = moveStart + MOVE_FRAMES;
-  const actionStart = moveEnd + 2;
+
+  // Every phase's timing comes from the same motion model buildTimeline()
+  // used to size this step's total duration in the first place, so the
+  // action always has genuine settle time before the next step cuts in
+  // instead of racing to finish right as the step ends.
+  const motion = step ? computeStepMotion(step, index === 0) : null;
+  const slideFrames = msToFrames(SLIDE_MS, fps);
+  const moveStart = step && motion ? step.startFrame + msToFrames(motion.moveStartMs, fps) : 0;
+  const moveEnd = step && motion ? moveStart + msToFrames(motion.moveDurationMs, fps) : 0;
+  const actionStart = step && motion ? step.startFrame + msToFrames(motion.actionStartMs, fps) : 0;
+  const actionDurationFrames = motion ? msToFrames(motion.actionDurationMs, fps) : 0;
 
   // Real-DOM measurement of the model-provided data-action-target element —
   // screens are the model's arbitrary exact recreation, so target positions
@@ -99,12 +108,27 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
       if (target) {
         const full = step.userAction.typeText || "";
         const charCount = Math.floor(
-          interpolate(frame, [actionStart, actionStart + Math.max(1, full.length / CHARS_PER_FRAME)], [0, full.length], {
+          interpolate(frame, [actionStart, actionStart + actionDurationFrames], [0, full.length], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
           })
         );
         target.textContent = full.slice(0, charCount);
+      }
+    } else if (step.userAction.actionType === "scroll") {
+      // Scrolls the same wrapper the live GSAP player scrolls (data-role
+      // "content"), not data-action-target — the model marks the cursor's
+      // resting spot there, but the actual scroll container is our own
+      // wrapper around its recreated HTML.
+      const scrollEl = currentSceneRef.current;
+      if (scrollEl) {
+        const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+        const scrollProgress = interpolate(frame, [actionStart, actionStart + actionDurationFrames], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+          easing: Easing.inOut(Easing.ease),
+        });
+        scrollEl.scrollTop = maxScroll * scrollProgress;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,10 +137,19 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
   if (!step) return <AbsoluteFill style={{ background: "#05050a" }} />;
 
   const sinceStart = frame - step.startFrame;
-  const crossT =
+  // Screens slide in/out edge-to-edge (translateX) instead of crossfading in
+  // place — two differently laid-out screens blended at partial opacity on
+  // top of each other read as a broken "double exposure", not a transition.
+  const slideT =
     index > 0
-      ? interpolate(sinceStart, [0, CROSSFADE_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+      ? interpolate(sinceStart, [0, slideFrames], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+          easing: Easing.inOut(Easing.ease),
+        })
       : 1;
+  const prevXPercent = -100 * slideT;
+  const currentXPercent = index === 0 ? 0 : 100 * (1 - slideT);
 
   const easing = Easing.inOut(Easing.ease);
   const fromPos = prevTargetPos ?? CURSOR_HOME;
@@ -133,7 +166,7 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
     easing,
   });
 
-  const firstAppearFrame = steps[0].startFrame + MOVE_DELAY_FRAMES - 6;
+  const firstAppearFrame = moveStart - 6;
   const cursorOpacity = currentTargetPos
     ? interpolate(frame, [firstAppearFrame, firstAppearFrame + 6], [0, 1], {
         extrapolateLeft: "clamp",
@@ -168,9 +201,12 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
 
   return (
     <AbsoluteFill style={{ background: "#05050a", fontFamily: "Inter, ui-sans-serif, system-ui" }}>
-      <div ref={stageRef} style={{ position: "absolute", top: 0, left: 0, right: 0, height: CARD_HEIGHT }}>
-        {prevStep && crossT < 1 && <StepScene ref={prevSceneRef} step={prevStep} opacity={1 - crossT} />}
-        <StepScene ref={currentSceneRef} step={step} opacity={index === 0 ? 1 : crossT} />
+      <div
+        ref={stageRef}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, height: CARD_HEIGHT, overflow: "hidden" }}
+      >
+        {prevStep && slideT < 1 && <StepScene ref={prevSceneRef} step={prevStep} xPercent={prevXPercent} />}
+        <StepScene ref={currentSceneRef} step={step} xPercent={currentXPercent} />
         <CursorLayer
           x={cursorX}
           y={cursorY}

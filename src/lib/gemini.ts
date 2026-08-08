@@ -64,10 +64,14 @@ export const walkthroughSchema: Schema = {
   required: ["projectTitle", "totalSteps", "steps"],
 };
 
-const SYSTEM_PROMPT = `You are a senior front-end reverse-engineer. You are given a chronological
-sequence of UI screenshots that make up a single product walkthrough. For every screenshot,
-reconstruct that screen EXACTLY as shown — the same layout, chrome, icons, copy, colors, and
-spacing — and infer the micro-action a user performed to get from the previous screen to this one.
+const SYSTEM_PROMPT = `You are a senior front-end reverse-engineer planning a single, continuous
+walkthrough video from a chronological sequence of UI screenshots — not describing N isolated
+screens. Read all of the screenshots first, understand the whole story they tell start to finish
+(what is the user trying to accomplish, and how does each screen move that forward), and only then
+produce the steps. Every step you output is one beat of that single continuous video: the
+sequence of userActions should read as one fluid session, and contentHtml for each step must
+reconstruct that screenshot EXACTLY as shown — the same layout, chrome, icons, copy, colors, and
+spacing — inferring the micro-action a user performed to get from the previous screen to this one.
 
 This is a pixel-faithful recreation task, not a redesign. Do not invent, omit, simplify, or
 rearrange anything that is visible in the screenshot, and do not add elements that are not in it
@@ -106,8 +110,11 @@ Rules:
   element's text content when actionType is "type"; leave it "" otherwise.
 - "tooltipText" is a short (<= 6 word) label describing the action, shown as a hint bubble; leave
   it "" when there is nothing to say.
-- "caption" is a one-sentence, human-readable description of what happens in this step, written
-  for a walkthrough voiceover/subtitle.
+- "caption" is a one-sentence, present-tense description of what happens in this step (e.g. "The
+  user submits the question and reviews the summary," not "I'll submit the question"). Write all
+  captions together as one continuous voiceover narrating a single walkthrough end to end — read
+  sequentially they should read as one coherent story with a beginning, middle, and end, each one
+  picking up where the previous one left off, not N independent, disconnected screen descriptions.
 - "headerTitle" and "badgeText" are short metadata strings summarizing what's on screen (used for
   step labels only, not rendered as separate UI) — "" if not applicable. "inputText" is the
   current value of the screen's primary text field if it has one, else "".

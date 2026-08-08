@@ -9,10 +9,13 @@ import ControlBar from "./ControlBar";
 import StepPills from "./StepPills";
 import { AnalysisResult } from "@/lib/types";
 import { buildTimeline } from "@/lib/timeline";
+import { computeStepMotion, SLIDE_MS } from "@/lib/motionTiming";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(TextPlugin);
 }
+
+const SLIDE_DURATION = SLIDE_MS / 1000;
 
 function formatTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -63,7 +66,10 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
 
       cardRefs.current.forEach((el, i) => {
         if (!el) return;
-        gsap.set(el, { opacity: i === 0 ? 1 : 0, y: 0 });
+        // Cards slide in/out edge-to-edge instead of crossfading in place —
+        // opacity-blending two screens with different layouts/heights on top
+        // of each other produced an incoherent "double exposure" look.
+        gsap.set(el, { xPercent: i === 0 ? 0 : 100 });
       });
       gsap.set(cursorRef.current, { opacity: 0, x: 40, y: 40 });
       gsap.set(rippleRef.current, { opacity: 0 });
@@ -78,18 +84,13 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
         if (!cardEl) return;
 
         if (i > 0 && prevCardEl) {
-          tl.to(prevCardEl, { opacity: 0, y: -10, duration: 0.35, ease: "power2.inOut" }, t0);
-          tl.fromTo(
-            cardEl,
-            { opacity: 0, y: 10 },
-            { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" },
-            t0
-          );
+          tl.to(prevCardEl, { xPercent: -100, duration: SLIDE_DURATION, ease: "power2.inOut" }, t0);
+          tl.to(cardEl, { xPercent: 0, duration: SLIDE_DURATION, ease: "power2.inOut" }, t0);
         }
 
-        // Label lands after the crossfade settles so step-pill scrubbing jumps
+        // Label lands after the slide settles so step-pill scrubbing jumps
         // straight to a fully-visible destination card, not a mid-transition frame.
-        tl.addLabel(`step-${step.stepId}`, i === 0 ? t0 : t0 + 0.46);
+        tl.addLabel(`step-${step.stepId}`, i === 0 ? t0 : t0 + SLIDE_DURATION + 0.01);
 
         // Located via the model-provided instrumentation attribute (see the
         // Gemini prompt) — the real element within the model's own exact
@@ -100,8 +101,15 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
         // model baked into contentHtml for this step (the "final" typed text).
         const bakedTargetText = targetEl?.textContent ?? "";
 
-        const moveStart = i === 0 ? t0 + 0.35 : t0 + 0.5;
-        const moveDuration = 0.6;
+        // Every phase's timing comes from the same motion model buildTimeline()
+        // used to size this step's total duration in the first place, so the
+        // action always has genuine settle time before the next step cuts in
+        // instead of racing to finish right as the step ends.
+        const motion = computeStepMotion(step, i === 0);
+        const moveStart = t0 + motion.moveStartMs / 1000;
+        const moveDuration = motion.moveDurationMs / 1000;
+        const actionStart = t0 + motion.actionStartMs / 1000;
+        const actionDuration = motion.actionDurationMs / 1000;
 
         if (targetEl) {
           tl.to(cursorRef.current, { opacity: 1, duration: 0.2 }, moveStart - 0.15);
@@ -125,9 +133,6 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
           );
         }
 
-        const actionStart = moveStart + moveDuration + 0.05;
-        const stepEnd = t0 + step.durationMs / 1000;
-        const remaining = Math.max(0.3, stepEnd - actionStart - 0.2);
         const { actionType, typeText, tooltipText } = step.userAction;
 
         if (tooltipText) {
@@ -139,14 +144,13 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
             actionStart
           );
           tl.to(tooltipRef.current, { opacity: 1, duration: 0.2 }, actionStart);
-          tl.to(tooltipRef.current, { opacity: 0, duration: 0.2 }, actionStart + Math.min(remaining, 1.1));
+          tl.to(tooltipRef.current, { opacity: 0, duration: 0.2 }, actionStart + Math.min(actionDuration + 0.6, 1.6));
         }
 
         if (actionType === "type" && targetEl) {
           const finalText = bakedTargetText || typeText;
           tl.set(targetEl, { text: "" }, actionStart);
-          const typeDuration = Math.min(remaining, Math.max(0.5, finalText.length * 0.032));
-          tl.to(targetEl, { duration: typeDuration, text: finalText, ease: "none" }, actionStart + 0.15);
+          tl.to(targetEl, { duration: actionDuration, text: finalText, ease: "none" }, actionStart);
         } else if ((actionType === "click" || actionType === "hover") && targetEl) {
           tl.to(
             targetEl,
@@ -164,7 +168,7 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
           if (contentEl) {
             tl.to(
               contentEl,
-              { scrollTop: () => contentEl.scrollHeight, duration: Math.min(remaining, 1.2), ease: "power1.inOut" },
+              { scrollTop: () => contentEl.scrollHeight, duration: actionDuration, ease: "power1.inOut" },
               actionStart
             );
           }
@@ -228,7 +232,7 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
         <StepPills steps={analysis.steps} activeIndex={currentStepIndex} onSelect={handleStepSelect} />
       </div>
 
-      <div ref={stageRef} className="relative aspect-[16/10] w-full">
+      <div ref={stageRef} className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl">
         {analysis.steps.map((step, i) => (
           <StepCard
             key={step.stepId}
