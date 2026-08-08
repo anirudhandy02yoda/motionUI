@@ -1,103 +1,137 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { Rocket, Sparkles, CheckCircle2, RefreshCcw } from "lucide-react";
+import Uploader from "@/components/Uploader";
+import WalkthroughStage from "@/components/WalkthroughStage";
+import { AnalysisResult } from "@/lib/types";
+import { sampleAnalysis } from "@/lib/sampleData";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleAnalyze = async (files: File[]) => {
+    setIsAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const formData = new FormData();
+      files.forEach((f) => formData.append("images", f));
+      const res = await fetch("/api/analyze-screens", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to analyze screenshots.");
+      setAnalysis(data.analysis);
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!analysis) return;
+    setIsExporting(true);
+    setExportError(null);
+    setExportUrl(null);
+    try {
+      const res = await fetch("/api/render-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysis }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to render video.");
+      setExportUrl(data.url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const reset = () => {
+    setAnalysis(null);
+    setAnalyzeError(null);
+    setExportUrl(null);
+    setExportError(null);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#050509] text-white">
+      <header className="border-b border-white/5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500">
+              <Rocket size={16} />
+            </div>
+            <span className="text-sm font-semibold tracking-tight">Antigravity</span>
+          </div>
+          {analysis && (
+            <button
+              type="button"
+              onClick={reset}
+              className="flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/60 transition-colors hover:border-white/25 hover:text-white"
+            >
+              <RefreshCcw size={12} />
+              Start over
+            </button>
+          )}
         </div>
+      </header>
+
+      <main className="mx-auto max-w-5xl px-6 py-14">
+        {!analysis ? (
+          <>
+            <div className="mx-auto mb-10 max-w-2xl text-center">
+              <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
+                <Sparkles size={12} />
+                Screenshots in, interactive walkthrough out
+              </span>
+              <h1 className="text-4xl font-semibold tracking-tight text-white">
+                Turn 4–5 screenshots into a reconstructed, animated UI walkthrough
+              </h1>
+              <p className="mt-4 text-white/50">
+                Antigravity analyzes a chronological sequence of screenshots, recreates each screen, infers the
+                micro-actions between them, and plays it back as an interactive preview — or exports it as a
+                60fps MP4.
+              </p>
+            </div>
+
+            <Uploader onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} error={analyzeError} />
+
+            <div className="mt-8 text-center">
+              <button
+                type="button"
+                onClick={() => setAnalysis(sampleAnalysis)}
+                className="text-xs text-white/40 underline decoration-white/20 underline-offset-4 hover:text-white/70"
+              >
+                No screenshots handy? Try the bundled sample walkthrough
+              </button>
+            </div>
+          </>
+        ) : (
+          <div>
+            <WalkthroughStage analysis={analysis} onExport={handleExport} isExporting={isExporting} />
+
+            {exportError && (
+              <p className="mt-4 text-center text-sm text-red-400">{exportError}</p>
+            )}
+            {exportUrl && (
+              <div className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300">
+                <CheckCircle2 size={16} />
+                Video ready —{" "}
+                <a href={exportUrl} download className="font-semibold underline underline-offset-2">
+                  download the MP4
+                </a>
+              </div>
+            )}
+          </div>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }

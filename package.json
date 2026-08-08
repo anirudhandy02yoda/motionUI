@@ -4,24 +4,35 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "remotion:studio": "remotion studio src/remotion/index.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.16.0",
+    "@remotion/bundler": "^4.0.507",
+    "@remotion/cli": "^4.0.507",
+    "@remotion/player": "^4.0.507",
+    "@remotion/renderer": "^4.0.507",
+    "@remotion/tailwind-v4": "^4.0.507",
+    "clsx": "^2.1.1",
+    "gsap": "^3.15.0",
+    "lucide-react": "^1.30.0",
+    "next": "15.5.23",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.23"
+    "remotion": "^4.0.507"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.5.23",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
