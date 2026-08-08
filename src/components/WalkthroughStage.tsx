@@ -7,9 +7,12 @@ import StepCard from "./StepCard";
 import Cursor from "./Cursor";
 import ControlBar from "./ControlBar";
 import StepPills from "./StepPills";
-import { AnalysisResult } from "@/lib/types";
+import { AnalysisResult, Timeline } from "@/lib/types";
 import { buildTimeline } from "@/lib/timeline";
 import { computeStepMotion, SLIDE_MS } from "@/lib/motionTiming";
+import { describeActionPhase } from "@/lib/actionPhrase";
+
+const COMPLETE_MESSAGE = "Walkthrough complete! Click Restart to watch again or select a step.";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(TextPlugin);
@@ -20,6 +23,28 @@ const SLIDE_DURATION = SLIDE_MS / 1000;
 function formatTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `0:${String(s).padStart(2, "0")}`;
+}
+
+/** Pure function of "where is the playhead right now" — used instead of
+ * scheduling GSAP .call()s at fixed times, since those fire unreliably when
+ * scrubbing/seeking backward across them. Reads as "Step N: <caption>"
+ * while the screen settles in, swaps to a live status line once the
+ * action itself starts, and shows a completion message once the whole
+ * timeline has played through — correct for any time you jump to directly. */
+function deriveCaptionText(timeline: Timeline, tMs: number): string {
+  if (timeline.steps.length === 0) return "";
+  if (tMs >= timeline.totalDurationMs) return COMPLETE_MESSAGE;
+
+  const idx = timeline.steps.findIndex((s) => tMs >= s.startMs && tMs < s.startMs + s.durationMs);
+  const step = timeline.steps[idx === -1 ? timeline.steps.length - 1 : idx];
+  const motion = computeStepMotion(step, step === timeline.steps[0]);
+  const actionStartMs = step.startMs + motion.actionStartMs;
+
+  if (tMs >= actionStartMs) {
+    const phase = describeActionPhase(step.userAction);
+    if (phase) return phase;
+  }
+  return `Step ${step.stepId}: ${step.caption}`;
 }
 
 interface WalkthroughStageProps {
@@ -35,6 +60,7 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
   const rippleRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipLabelRef = useRef<HTMLSpanElement>(null);
+  const captionRef = useRef<HTMLParagraphElement>(null);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -60,6 +86,7 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
             (s) => t * 1000 >= s.startMs && t * 1000 < s.startMs + s.durationMs
           );
           if (idx !== -1) setCurrentStepIndex(idx);
+          if (captionRef.current) captionRef.current.textContent = deriveCaptionText(timeline, t * 1000);
         },
         onComplete: () => setIsPlaying(false),
       });
@@ -218,19 +245,27 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
     if (step) tlRef.current?.seek(`step-${step.stepId}`, false);
   }, [analysis.steps]);
 
-  const activeStep = analysis.steps[currentStepIndex];
-
   return (
     <div className="w-full max-w-4xl mx-auto">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-white/90">{analysis.projectTitle}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-white/90">
+            {analysis.projectTitle}
+            <span className="text-white/40">— Interactive Feature Walkthrough</span>
+            <span className="inline-flex items-center rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              Live Demo
+            </span>
+          </h2>
           <p className="text-xs text-white/40">
             Step {currentStepIndex + 1} of {analysis.steps.length} · {formatTime(elapsedMs)} / {formatTime(totalDurationMs)}
           </p>
         </div>
         <StepPills steps={analysis.steps} activeIndex={currentStepIndex} onSelect={handleStepSelect} />
       </div>
+
+      <p ref={captionRef} className="mb-3 min-h-[20px] text-center text-sm text-white/60">
+        {analysis.steps[0] && `Step ${analysis.steps[0].stepId}: ${analysis.steps[0].caption}`}
+      </p>
 
       <div ref={stageRef} className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl">
         {analysis.steps.map((step, i) => (
@@ -250,10 +285,6 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
           tooltipLabelRef={tooltipLabelRef}
         />
       </div>
-
-      {activeStep && (
-        <p className="mt-3 min-h-[20px] text-center text-sm text-white/60">{activeStep.caption}</p>
-      )}
 
       <div className="mt-4">
         <ControlBar

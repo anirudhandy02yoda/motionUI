@@ -4,6 +4,7 @@ import type { CalculateMetadataFunction } from "remotion";
 import { AnalysisResult } from "@/lib/types";
 import { buildTimeline, timelineToFrames, msToFrames } from "@/lib/timeline";
 import { computeStepMotion, SLIDE_MS } from "@/lib/motionTiming";
+import { describeActionPhase } from "@/lib/actionPhrase";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, VIDEO_FPS, CARD_HEIGHT, CURSOR_HOME } from "./layout";
 import StepScene from "./StepScene";
 import CursorLayer from "./CursorLayer";
@@ -176,6 +177,14 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
 
   const { actionType, tooltipText } = step.userAction;
 
+  // Caption reads "Step N: <what this step shows>" while the screen settles
+  // in, then swaps to a live status line once the action itself starts —
+  // mirrors the same time-based derivation the live GSAP player uses.
+  const captionText =
+    frame >= actionStart
+      ? describeActionPhase(step.userAction) || `Step ${step.stepId}: ${step.caption}`
+      : `Step ${step.stepId}: ${step.caption}`;
+
   let rippleOpacity = 0;
   let rippleScale = 0.3;
   if (actionType === "click" || actionType === "hover") {
@@ -229,7 +238,7 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
           padding: "0 80px",
         }}
       >
-        {step.caption}
+        {captionText}
       </div>
     </AbsoluteFill>
   );

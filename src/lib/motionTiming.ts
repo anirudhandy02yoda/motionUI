@@ -10,19 +10,19 @@ import { WalkthroughStep } from "./types";
  * phases for a step's total duration, so the "planned" duration and the
  * "actual" animation always agree by construction. */
 
-export const SLIDE_MS = 500;
-const MOVE_GAP_MS = 100; // pause after the slide settles, before the cursor starts moving
-const FIRST_STEP_MOVE_DELAY_MS = 350; // no incoming slide on step 1, so it can start sooner
-const MOVE_DURATION_MS = 600;
-const ACTION_GAP_MS = 120; // pause after the cursor arrives, before the action itself starts
+export const SLIDE_MS = 550;
+const MOVE_GAP_MS = 150; // pause after the slide settles, before the cursor starts moving
+const FIRST_STEP_MOVE_DELAY_MS = 500; // no incoming slide on step 1, so it can start sooner
+const MOVE_DURATION_MS = 750;
+const ACTION_GAP_MS = 200; // pause after the cursor arrives, before the action itself starts
 
-const MS_PER_TYPED_CHAR = 55; // deliberately slow enough to visibly read as "typing"
-const MIN_TYPE_MS = 900;
-const MAX_TYPE_MS = 4200;
-const CLICK_OR_HOVER_MS = 500;
-const SCROLL_MS = 1100;
+const MS_PER_TYPED_CHAR = 110; // deliberately slow enough to visibly read as "typing"
+const MIN_TYPE_MS = 1400;
+const MAX_TYPE_MS = 7000;
+const CLICK_OR_HOVER_MS = 1200;
+const SCROLL_MS = 1800;
 
-const HOLD_MS = 1000; // dwell time after the action finishes, before the step ends
+const HOLD_MS = 2000; // dwell time after the action finishes, before the step ends
 
 export interface StepMotion {
   moveStartMs: number;
