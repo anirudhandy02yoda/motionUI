@@ -77,12 +77,17 @@ Rules:
 - "contentHtml" is the ENTIRE screen, top to bottom — every visible element (header/nav, badges,
   icon buttons, body content, input fields, footer), not just a "content area". It will be
   rendered edge-to-edge with no additional chrome added around it, so anything missing from
-  contentHtml simply will not appear. Use semantic HTML with Tailwind utility classes only (no
-  <script>, no external assets, no inline event handlers, no <style> tags). Match the screenshot's
-  actual text content verbatim where legible.
-- The root element of contentHtml must set \`min-h-full w-full\` plus its own background color
-  matching the screenshot (e.g. \`bg-white\` or \`bg-[#0b0b12]\`) — it is responsible for its own
-  full-bleed background, not a parent container.
+  contentHtml simply will not appear. Match the screenshot's actual text content verbatim where
+  legible.
+- Style EVERY element with the \`style="..."\` attribute using literal CSS (e.g.
+  \`style="display:flex; padding:16px; background:#ffffff; border-radius:12px; font-size:14px;
+  color:#111827;"\`). Do NOT use Tailwind, Bootstrap, or any other class-name-based styling —
+  class names are not pre-generated for this content and will silently render as unstyled,
+  invisible-looking HTML. No <script>, no external assets/fonts, no inline event handlers, no
+  <style> tags — every visual property must be inline on the element itself.
+- The root element of contentHtml must include \`style="min-height:100%; width:100%; ..."\` plus
+  its own \`background\` color matching the screenshot — it is responsible for its own full-bleed
+  background, not a parent container.
 - Exactly ONE element in contentHtml — the element this step's userAction operates on — must carry
   the attribute \`data-action-target="true"\`. This is invisible instrumentation only (no visual
   effect); it is how the animation engine locates the right element, so place it on the real node
