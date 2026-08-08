@@ -1,10 +1,9 @@
-import React from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { AbsoluteFill, interpolate, Easing, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CalculateMetadataFunction } from "remotion";
 import { AnalysisResult } from "@/lib/types";
 import { buildTimeline, timelineToFrames } from "@/lib/timeline";
-import { resolveTargetRole } from "@/lib/actionTarget";
-import { CANVAS_WIDTH, CANVAS_HEIGHT, VIDEO_FPS, TARGET_CENTERS, CURSOR_HOME, CARD_HEIGHT } from "./layout";
+import { CANVAS_WIDTH, CANVAS_HEIGHT, VIDEO_FPS, CARD_HEIGHT, CURSOR_HOME } from "./layout";
 import StepScene from "./StepScene";
 import CursorLayer from "./CursorLayer";
 
@@ -30,52 +29,119 @@ export const calculateWalkthroughMetadata: CalculateMetadataFunction<
   };
 };
 
+type Point = { x: number; y: number };
+
+function measureActionTarget(root: HTMLElement | null, stageEl: HTMLElement): Point | null {
+  const target = root?.querySelector<HTMLElement>("[data-action-target]");
+  if (!target) return null;
+  const r = target.getBoundingClientRect();
+  const sr = stageEl.getBoundingClientRect();
+  return { x: r.left - sr.left + r.width / 2, y: r.top - sr.top + r.height / 2 };
+}
+
 export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ analysis }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const frames = timelineToFrames(buildTimeline(analysis), fps);
   const steps = frames.steps;
 
-  if (steps.length === 0) return <AbsoluteFill style={{ background: "#05050a" }} />;
+  const stageRef = useRef<HTMLDivElement>(null);
+  const currentSceneRef = useRef<HTMLDivElement>(null);
+  const prevSceneRef = useRef<HTMLDivElement>(null);
+  const [currentTargetPos, setCurrentTargetPos] = useState<Point | null>(null);
+  const [prevTargetPos, setPrevTargetPos] = useState<Point | null>(null);
+  const measuredCurrentIndex = useRef<number>(-1);
+  const measuredPrevIndex = useRef<number>(-2);
 
-  let index = steps.findIndex((s) => frame >= s.startFrame && frame < s.startFrame + s.durationFrames);
-  if (index === -1) index = frame < steps[0].startFrame ? 0 : steps.length - 1;
+  let index = 0;
+  if (steps.length > 0) {
+    const found = steps.findIndex((s) => frame >= s.startFrame && frame < s.startFrame + s.durationFrames);
+    index = found === -1 ? (frame < steps[0].startFrame ? 0 : steps.length - 1) : found;
+  }
 
   const step = steps[index];
   const prevStep = index > 0 ? steps[index - 1] : null;
+  const moveStart = step ? step.startFrame + MOVE_DELAY_FRAMES : 0;
+  const moveEnd = moveStart + MOVE_FRAMES;
+  const actionStart = moveEnd + 2;
+
+  // Real-DOM measurement of the model-provided data-action-target element —
+  // screens are the model's arbitrary exact recreation, so target positions
+  // can't be hard-coded; they're read from the actual rendered layout, the
+  // same instrumentation attribute the live GSAP player relies on. Position
+  // is locked once the cursor finishes arriving (matching the live player,
+  // where the move tween's target is only evaluated once) so it doesn't
+  // drift if the target element's box changes size while typing.
+  useLayoutEffect(() => {
+    if (!step || !stageRef.current) return;
+    const stageEl = stageRef.current;
+
+    if (measuredCurrentIndex.current !== index || frame <= moveEnd) {
+      const pos = measureActionTarget(currentSceneRef.current, stageEl);
+      if (pos) {
+        setCurrentTargetPos(pos);
+        measuredCurrentIndex.current = index;
+      }
+    }
+
+    if (prevStep) {
+      if (measuredPrevIndex.current !== index) {
+        setPrevTargetPos(measureActionTarget(prevSceneRef.current, stageEl));
+        measuredPrevIndex.current = index;
+      }
+    } else if (measuredPrevIndex.current !== index) {
+      setPrevTargetPos(null);
+      measuredPrevIndex.current = index;
+    }
+
+    if (step.userAction.actionType === "type") {
+      const target = currentSceneRef.current?.querySelector<HTMLElement>("[data-action-target]");
+      if (target) {
+        const full = step.userAction.typeText || "";
+        const charCount = Math.floor(
+          interpolate(frame, [actionStart, actionStart + Math.max(1, full.length / CHARS_PER_FRAME)], [0, full.length], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          })
+        );
+        target.textContent = full.slice(0, charCount);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frame, index]);
+
+  if (!step) return <AbsoluteFill style={{ background: "#05050a" }} />;
 
   const sinceStart = frame - step.startFrame;
   const crossT =
-    index > 0 ? interpolate(sinceStart, [0, CROSSFADE_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 1;
+    index > 0
+      ? interpolate(sinceStart, [0, CROSSFADE_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+      : 1;
 
-  const role = resolveTargetRole(step.userAction);
-  const targetPos = TARGET_CENTERS[role];
-  const prevRole = prevStep ? resolveTargetRole(prevStep.userAction) : null;
-  const prevPos = prevRole ? TARGET_CENTERS[prevRole] : CURSOR_HOME;
-
-  const moveStart = step.startFrame + MOVE_DELAY_FRAMES;
-  const moveEnd = moveStart + MOVE_FRAMES;
   const easing = Easing.inOut(Easing.ease);
+  const fromPos = prevTargetPos ?? CURSOR_HOME;
+  const toPos = currentTargetPos ?? fromPos;
 
-  const cursorX = interpolate(frame, [moveStart, moveEnd], [prevPos.x, targetPos.x], {
+  const cursorX = interpolate(frame, [moveStart, moveEnd], [fromPos.x, toPos.x], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing,
   });
-  const cursorY = interpolate(frame, [moveStart, moveEnd], [prevPos.y, targetPos.y], {
+  const cursorY = interpolate(frame, [moveStart, moveEnd], [fromPos.y, toPos.y], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing,
   });
 
   const firstAppearFrame = steps[0].startFrame + MOVE_DELAY_FRAMES - 6;
-  const cursorOpacity = interpolate(frame, [firstAppearFrame, firstAppearFrame + 6], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const cursorOpacity = currentTargetPos
+    ? interpolate(frame, [firstAppearFrame, firstAppearFrame + 6], [0, 1], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      })
+    : 0;
 
-  const actionStart = moveEnd + 2;
-  const { actionType, typeText, tooltipText } = step.userAction;
+  const { actionType, tooltipText } = step.userAction;
 
   let rippleOpacity = 0;
   let rippleScale = 0.3;
@@ -100,38 +166,21 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
       )
     : 0;
 
-  let typedInputText = step.domStructure.inputText || "";
-  if (actionType === "type") {
-    const charCount = Math.floor(
-      interpolate(frame, [actionStart, actionStart + typeText.length / CHARS_PER_FRAME], [0, typeText.length], {
-        extrapolateLeft: "clamp",
-        extrapolateRight: "clamp",
-      })
-    );
-    typedInputText = typeText.slice(0, charCount);
-  }
-
   return (
     <AbsoluteFill style={{ background: "#05050a", fontFamily: "Inter, ui-sans-serif, system-ui" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: CARD_HEIGHT }}>
-        {prevStep && crossT < 1 && (
-          <StepScene
-            step={{ ...prevStep }}
-            opacity={1 - crossT}
-            typedInputText={prevStep.domStructure.inputText || ""}
-          />
-        )}
-        <StepScene step={{ ...step }} opacity={index === 0 ? 1 : crossT} typedInputText={typedInputText} />
+      <div ref={stageRef} style={{ position: "absolute", top: 0, left: 0, right: 0, height: CARD_HEIGHT }}>
+        {prevStep && crossT < 1 && <StepScene ref={prevSceneRef} step={prevStep} opacity={1 - crossT} />}
+        <StepScene ref={currentSceneRef} step={step} opacity={index === 0 ? 1 : crossT} />
+        <CursorLayer
+          x={cursorX}
+          y={cursorY}
+          opacity={cursorOpacity}
+          rippleOpacity={rippleOpacity}
+          rippleScale={rippleScale}
+          tooltipOpacity={tooltipOpacity}
+          tooltipText={tooltipText}
+        />
       </div>
-      <CursorLayer
-        x={cursorX}
-        y={cursorY}
-        opacity={cursorOpacity}
-        rippleOpacity={rippleOpacity}
-        rippleScale={rippleScale}
-        tooltipOpacity={tooltipOpacity}
-        tooltipText={tooltipText}
-      />
       <div
         style={{
           position: "absolute",

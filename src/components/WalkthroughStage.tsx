@@ -9,7 +9,6 @@ import ControlBar from "./ControlBar";
 import StepPills from "./StepPills";
 import { AnalysisResult } from "@/lib/types";
 import { buildTimeline } from "@/lib/timeline";
-import { resolveTargetRole } from "@/lib/actionTarget";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(TextPlugin);
@@ -92,15 +91,14 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
         // straight to a fully-visible destination card, not a mid-transition frame.
         tl.addLabel(`step-${step.stepId}`, i === 0 ? t0 : t0 + 0.46);
 
-        const role = resolveTargetRole(step.userAction);
-        const targetEl = cardEl.querySelector<HTMLElement>(`[data-role="${role}"]`);
-
-        // Seed the input box with its resting text; overwritten by the typewriter
-        // tween below when this step's own action is what types it.
-        const inputEl = cardEl.querySelector<HTMLElement>('[data-role="input"]');
-        if (inputEl) {
-          tl.set(inputEl, { text: step.domStructure.inputText || "" }, t0);
-        }
+        // Located via the model-provided instrumentation attribute (see the
+        // Gemini prompt) — the real element within the model's own exact
+        // recreation, not an element we invented. Absent entirely if the
+        // model omitted it; the step just plays without a cursor that beat.
+        const targetEl = cardEl.querySelector<HTMLElement>("[data-action-target]");
+        // Captured before any tween runs, so it reflects exactly what the
+        // model baked into contentHtml for this step (the "final" typed text).
+        const bakedTargetText = targetEl?.textContent ?? "";
 
         const moveStart = i === 0 ? t0 + 0.35 : t0 + 0.5;
         const moveDuration = 0.6;
@@ -145,9 +143,10 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
         }
 
         if (actionType === "type" && targetEl) {
+          const finalText = bakedTargetText || typeText;
           tl.set(targetEl, { text: "" }, actionStart);
-          const typeDuration = Math.min(remaining, Math.max(0.5, typeText.length * 0.032));
-          tl.to(targetEl, { duration: typeDuration, text: typeText, ease: "none" }, actionStart + 0.15);
+          const typeDuration = Math.min(remaining, Math.max(0.5, finalText.length * 0.032));
+          tl.to(targetEl, { duration: typeDuration, text: finalText, ease: "none" }, actionStart + 0.15);
         } else if ((actionType === "click" || actionType === "hover") && targetEl) {
           tl.to(
             targetEl,
@@ -198,19 +197,21 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
   }, [speed]);
 
   const handleRestart = useCallback(() => {
-    tlRef.current?.pause(0);
+    tlRef.current?.pause(0, false);
     setIsPlaying(true);
   }, []);
 
   const handleScrub = useCallback((p: number) => {
     setIsPlaying(false);
-    tlRef.current?.progress(p);
+    // suppressEvents defaults to true in GSAP, which would skip onUpdate and
+    // leave the step label/progress UI stuck at its last played position.
+    tlRef.current?.progress(p, false);
   }, []);
 
   const handleStepSelect = useCallback((index: number) => {
     setIsPlaying(false);
     const step = analysis.steps[index];
-    if (step) tlRef.current?.seek(`step-${step.stepId}`);
+    if (step) tlRef.current?.seek(`step-${step.stepId}`, false);
   }, [analysis.steps]);
 
   const activeStep = analysis.steps[currentStepIndex];
