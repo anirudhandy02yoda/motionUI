@@ -89,9 +89,12 @@ Rules:
   class names are not pre-generated for this content and will silently render as unstyled,
   invisible-looking HTML. No <script>, no external assets/fonts, no inline event handlers, no
   <style> tags — every visual property must be inline on the element itself.
-- The root element of contentHtml must include \`style="min-height:100%; width:100%; ..."\` plus
-  its own \`background\` color matching the screenshot — it is responsible for its own full-bleed
-  background, not a parent container.
+- The root element of contentHtml must include \`style="width:100%; ..."\` plus its own
+  \`background\` color matching the screenshot — it is responsible for its own background, not a
+  parent container. Do NOT force \`min-height:100%\` or otherwise stretch it to fill extra space —
+  let it size naturally to its own content, exactly like the screenshot's own box does. A compact
+  empty-state screen and a full-page answer are different heights in your screenshots; they must
+  stay different heights here too, not be stretched to match each other.
 - Exactly ONE element in contentHtml — the element this step's userAction operates on — must carry
   the attribute \`data-action-target="true"\`. This is invisible instrumentation only (no visual
   effect); it is how the animation engine locates the right element, so place it on the real node

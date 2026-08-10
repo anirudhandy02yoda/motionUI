@@ -10,9 +10,13 @@ import { WalkthroughStep } from "./types";
  * phases for a step's total duration, so the "planned" duration and the
  * "actual" animation always agree by construction. */
 
-export const SLIDE_MS = 550;
-const MOVE_GAP_MS = 150; // pause after the slide settles, before the cursor starts moving
-const FIRST_STEP_MOVE_DELAY_MS = 500; // no incoming slide on step 1, so it can start sooner
+// A fast blur+fade dissolve, not a slide — screens should read as one
+// continuous interactive UI updating in place, not a slideshow of separate
+// frames. Kept short and snappy on purpose; the deliberate pacing lives in
+// the typing/hold phases below, not in the transition itself.
+export const TRANSITION_MS = 280;
+const MOVE_GAP_MS = 100; // pause after the dissolve settles, before the cursor starts moving
+const FIRST_STEP_MOVE_DELAY_MS = 500; // no incoming transition on step 1, so it can start sooner
 const MOVE_DURATION_MS = 750;
 const ACTION_GAP_MS = 200; // pause after the cursor arrives, before the action itself starts
 
@@ -33,7 +37,7 @@ export interface StepMotion {
 }
 
 export function computeStepMotion(step: WalkthroughStep, isFirst: boolean): StepMotion {
-  const moveStartMs = isFirst ? FIRST_STEP_MOVE_DELAY_MS : SLIDE_MS + MOVE_GAP_MS;
+  const moveStartMs = isFirst ? FIRST_STEP_MOVE_DELAY_MS : TRANSITION_MS + MOVE_GAP_MS;
   const moveDurationMs = MOVE_DURATION_MS;
   const actionStartMs = moveStartMs + moveDurationMs + ACTION_GAP_MS;
 

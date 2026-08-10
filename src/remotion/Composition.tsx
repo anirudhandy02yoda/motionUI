@@ -3,7 +3,7 @@ import { AbsoluteFill, interpolate, Easing, useCurrentFrame, useVideoConfig } fr
 import type { CalculateMetadataFunction } from "remotion";
 import { AnalysisResult } from "@/lib/types";
 import { buildTimeline, timelineToFrames, msToFrames } from "@/lib/timeline";
-import { computeStepMotion, SLIDE_MS } from "@/lib/motionTiming";
+import { computeStepMotion, TRANSITION_MS } from "@/lib/motionTiming";
 import { describeActionPhase } from "@/lib/actionPhrase";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, VIDEO_FPS, CARD_HEIGHT, CURSOR_HOME } from "./layout";
 import StepScene from "./StepScene";
@@ -69,7 +69,7 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
   // action always has genuine settle time before the next step cuts in
   // instead of racing to finish right as the step ends.
   const motion = step ? computeStepMotion(step, index === 0) : null;
-  const slideFrames = msToFrames(SLIDE_MS, fps);
+  const transitionFrames = msToFrames(TRANSITION_MS, fps);
   const moveStart = step && motion ? step.startFrame + msToFrames(motion.moveStartMs, fps) : 0;
   const moveEnd = step && motion ? moveStart + msToFrames(motion.moveDurationMs, fps) : 0;
   const actionStart = step && motion ? step.startFrame + msToFrames(motion.actionStartMs, fps) : 0;
@@ -138,19 +138,21 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
   if (!step) return <AbsoluteFill style={{ background: "#05050a" }} />;
 
   const sinceStart = frame - step.startFrame;
-  // Screens slide in/out edge-to-edge (translateX) instead of crossfading in
-  // place — two differently laid-out screens blended at partial opacity on
-  // top of each other read as a broken "double exposure", not a transition.
-  const slideT =
+  // Screens dissolve in place (opacity + blur) rather than sliding — this
+  // reads as one continuous interactive UI updating itself, not a
+  // slideshow of separate same-size frames.
+  const dissolveT =
     index > 0
-      ? interpolate(sinceStart, [0, slideFrames], [0, 1], {
+      ? interpolate(sinceStart, [0, transitionFrames], [0, 1], {
           extrapolateLeft: "clamp",
           extrapolateRight: "clamp",
-          easing: Easing.inOut(Easing.ease),
+          easing: Easing.out(Easing.ease),
         })
       : 1;
-  const prevXPercent = -100 * slideT;
-  const currentXPercent = index === 0 ? 0 : 100 * (1 - slideT);
+  const prevOpacity = 1 - dissolveT;
+  const prevBlur = 10 * dissolveT;
+  const currentOpacity = index === 0 ? 1 : dissolveT;
+  const currentBlur = index === 0 ? 0 : 10 * (1 - dissolveT);
 
   const easing = Easing.inOut(Easing.ease);
   const fromPos = prevTargetPos ?? CURSOR_HOME;
@@ -214,8 +216,10 @@ export const WalkthroughComposition: React.FC<WalkthroughCompositionProps> = ({ 
         ref={stageRef}
         style={{ position: "absolute", top: 0, left: 0, right: 0, height: CARD_HEIGHT, overflow: "hidden" }}
       >
-        {prevStep && slideT < 1 && <StepScene ref={prevSceneRef} step={prevStep} xPercent={prevXPercent} />}
-        <StepScene ref={currentSceneRef} step={step} xPercent={currentXPercent} />
+        {prevStep && dissolveT < 1 && (
+          <StepScene ref={prevSceneRef} step={prevStep} opacity={prevOpacity} blurPx={prevBlur} />
+        )}
+        <StepScene ref={currentSceneRef} step={step} opacity={currentOpacity} blurPx={currentBlur} />
         <CursorLayer
           x={cursorX}
           y={cursorY}

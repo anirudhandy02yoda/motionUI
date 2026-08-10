@@ -21,7 +21,7 @@ const INPUT_TOOLBAR = `
   </div>`;
 
 const inputBox = (bodyHtml: string) => `
-<div style="min-height:100%;width:100%;display:flex;flex-direction:column;justify-content:flex-end;background:#ffffff;padding:32px;box-sizing:border-box;font-family:sans-serif;">
+<div style="width:100%;background:#ffffff;padding:96px 32px 40px;box-sizing:border-box;font-family:sans-serif;">
   <div style="margin:0 auto;width:100%;max-width:640px;border-radius:16px;border:1px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
     ${INPUT_TOOLBAR}
     ${bodyHtml}
@@ -38,7 +38,7 @@ const inputBox = (bodyHtml: string) => `
 </div>`;
 
 const answerScreen = (opts: { question: string; bodyHtml: string; actionIcon: "bookmark" | "copy" }) => `
-<div style="min-height:100%;width:100%;background:#ffffff;padding:32px;box-sizing:border-box;font-family:sans-serif;">
+<div style="width:100%;background:#ffffff;padding:32px;box-sizing:border-box;font-family:sans-serif;">
   <h2 style="margin:0 0 16px 0;font-size:24px;font-weight:600;color:#111827;">${opts.question}</h2>
   <div style="border-radius:12px;border:1px solid #f3f4f6;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
     <div style="display:flex;align-items:center;justify-content:space-between;border-radius:12px 12px 0 0;background:#fffbeb;padding:8px 16px;font-size:14px;color:#b45309;">

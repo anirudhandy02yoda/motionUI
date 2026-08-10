@@ -15,7 +15,13 @@ interface StepCardProps {
  * a purely decorative "device bezel" around the recreation, not a UI element
  * within it. The interactive element for this step's action is located at
  * runtime via the model-provided `data-action-target="true"` attribute
- * somewhere inside contentHtml. */
+ * somewhere inside contentHtml.
+ *
+ * Top-anchored at its own natural content height (capped to the stage's
+ * height, scrolling internally beyond that) rather than stretched to fill
+ * it — a compact empty-state screen and a tall full-page answer should
+ * both look like screenshots of the same app, not two panels forced to
+ * identical size. */
 const StepCard = forwardRef<HTMLDivElement, StepCardProps>(function StepCard(
   { step, isActive },
   ref
@@ -23,12 +29,12 @@ const StepCard = forwardRef<HTMLDivElement, StepCardProps>(function StepCard(
   return (
     <div
       ref={ref}
-      className="absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl"
+      className="absolute left-0 right-0 top-0 max-h-full overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl"
       aria-hidden={!isActive}
     >
       <div
         data-role="content"
-        className="h-full w-full overflow-y-auto"
+        className="max-h-full w-full overflow-y-auto"
         dangerouslySetInnerHTML={{ __html: step.domStructure.contentHtml || "" }}
       />
     </div>

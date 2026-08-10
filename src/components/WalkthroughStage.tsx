@@ -9,7 +9,7 @@ import ControlBar from "./ControlBar";
 import StepPills from "./StepPills";
 import { AnalysisResult, Timeline } from "@/lib/types";
 import { buildTimeline } from "@/lib/timeline";
-import { computeStepMotion, SLIDE_MS } from "@/lib/motionTiming";
+import { computeStepMotion, TRANSITION_MS } from "@/lib/motionTiming";
 import { describeActionPhase } from "@/lib/actionPhrase";
 
 const COMPLETE_MESSAGE = "Walkthrough complete! Click Restart to watch again or select a step.";
@@ -18,7 +18,7 @@ if (typeof window !== "undefined") {
   gsap.registerPlugin(TextPlugin);
 }
 
-const SLIDE_DURATION = SLIDE_MS / 1000;
+const TRANSITION_DURATION = TRANSITION_MS / 1000;
 
 function formatTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -93,10 +93,13 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
 
       cardRefs.current.forEach((el, i) => {
         if (!el) return;
-        // Cards slide in/out edge-to-edge instead of crossfading in place —
-        // opacity-blending two screens with different layouts/heights on top
-        // of each other produced an incoherent "double exposure" look.
-        gsap.set(el, { xPercent: i === 0 ? 0 : 100 });
+        // Screens dissolve in place (opacity + blur) rather than sliding —
+        // this reads as one continuous interactive UI updating itself,
+        // not a slideshow of separate same-size frames. Cards are also
+        // top-anchored at their own natural content height (see StepCard),
+        // so a compact input box and a tall full-page answer both look
+        // like the "same UI", not two panels forced to identical size.
+        gsap.set(el, { opacity: i === 0 ? 1 : 0, filter: "blur(0px)" });
       });
       gsap.set(cursorRef.current, { opacity: 0, x: 40, y: 40 });
       gsap.set(rippleRef.current, { opacity: 0 });
@@ -111,13 +114,18 @@ export default function WalkthroughStage({ analysis, onExport, isExporting }: Wa
         if (!cardEl) return;
 
         if (i > 0 && prevCardEl) {
-          tl.to(prevCardEl, { xPercent: -100, duration: SLIDE_DURATION, ease: "power2.inOut" }, t0);
-          tl.to(cardEl, { xPercent: 0, duration: SLIDE_DURATION, ease: "power2.inOut" }, t0);
+          tl.to(prevCardEl, { opacity: 0, filter: "blur(10px)", duration: TRANSITION_DURATION, ease: "power1.out" }, t0);
+          tl.fromTo(
+            cardEl,
+            { opacity: 0, filter: "blur(10px)" },
+            { opacity: 1, filter: "blur(0px)", duration: TRANSITION_DURATION, ease: "power1.out" },
+            t0
+          );
         }
 
-        // Label lands after the slide settles so step-pill scrubbing jumps
+        // Label lands after the dissolve settles so step-pill scrubbing jumps
         // straight to a fully-visible destination card, not a mid-transition frame.
-        tl.addLabel(`step-${step.stepId}`, i === 0 ? t0 : t0 + SLIDE_DURATION + 0.01);
+        tl.addLabel(`step-${step.stepId}`, i === 0 ? t0 : t0 + TRANSITION_DURATION + 0.01);
 
         // Located via the model-provided instrumentation attribute (see the
         // Gemini prompt) — the real element within the model's own exact
