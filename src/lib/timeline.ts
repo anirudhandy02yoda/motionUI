@@ -11,8 +11,8 @@ export const FPS = 30;
  * an action finishes and before the next step cuts in. */
 export function buildTimeline(analysis: AnalysisResult): Timeline {
   let cursor = 0;
-  const steps: TimedStep[] = analysis.steps.map((step, i) => {
-    const { totalMs } = computeStepMotion(step, i === 0);
+  const steps: TimedStep[] = analysis.steps.map((step) => {
+    const { totalMs } = computeStepMotion(step);
     const timed: TimedStep = { ...step, startMs: cursor, durationMs: totalMs };
     cursor += totalMs;
     return timed;

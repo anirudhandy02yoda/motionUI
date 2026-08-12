@@ -13,7 +13,7 @@ export function describeActionPhase(action: UserAction): string {
     case "scroll":
       return "Scrolling to read more...";
     case "click": {
-      const hay = `${action.targetSelector} ${action.tooltipText}`.toLowerCase();
+      const hay = `${action.targetId} ${action.tooltipText}`.toLowerCase();
       if (/(send|submit|arrow|go\b)/.test(hay)) return "Submitting the request...";
       return action.tooltipText ? `${action.tooltipText}...` : "Clicking to continue...";
     }
